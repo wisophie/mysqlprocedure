@@ -1,0 +1,48 @@
+delimiter //
+CREATE PROCEDURE aqltoaql2(in lot_size1 INT,in aql1 DOUBLE,OUT acr2 INT,OUT sample_sizer2 int)
+BEGIN 
+DECLARE ssclr CHAR(2);
+DECLARE acr INT;
+DECLARE sample_sizer int;
+SELECT q.sscl INTO ssclr FROM qm_aql q WHERE q.lot_size<=lot_size1 order by q.lot_size desc limit 1;
+SELECT q2.ac,q2.sample_size INTO acr,sample_sizer FROM qm_aql2 q2 WHERE q2.sscl=ssclr AND q2.aql=aql1 ;
+set acr2 =acr;
+set sample_sizer2=sample_sizer;
+END //
+
+delimiter //
+create procedure insertintoqm_tr2(in qmpt VARCHAR(50),in qmdoc VARCHAR(50),in sample_size int,in qmac INT,IN qty_opr int)
+begin
+declare t_ln,t_n_cnt INT;
+declare t_qty double;
+declare num INT;
+declare finalnum INT;
+
+select COUNT(*) INTO num from qm_pt q WHERE q.pt=qmpt AND q.qty_op=qty_opr;
+if num=1 then SELECT LN,qty,n_cnt INTO t_ln,t_qty,t_n_cnt from qm_pt q WHERE q.pt=qmpt AND q.qty_op=qty_opr;
+case 
+when qty_opr=0 then set finalnum=sample_size*t_n_cnt;
+when qty_opr=1 then set finalnum=t_qty*t_n_cnt;
+when qty_opr=2 then set finalnum=t_qty*sample_size*t_n_cnt;
+END case;
+insert into qm_tr(pt,doc,LN,ref1_seq,n_seq,ac) (SELECT qmpt,qmdoc,t_ln,(CASE WHEN sys_seq THEN CEIL(sys_seq/t_n_cnt) END),(CASE WHEN mod(sys_seq,t_n_cnt)>0 THEN mod(sys_seq,t_n_cnt) WHEN mod(sys_seq,t_n_cnt)=0 THEN t_n_cnt end),qmac FROM seq2 WHERE sys_seq<=finalnum);
+END if;
+
+end
+//
+
+delimiter //
+create procedure test2(IN ptin VARCHAR(50),IN lot_sizein int,IN docin VARCHAR(50))
+begin
+declare t_qty double;
+declare ac INT;
+declare sample_size INT;
+SELECT qty INTO t_qty from qm_pt q WHERE q.pt=ptin AND q.qty_op=0;
+CALL aqltoaql2(lot_sizein,t_qty,ac,sample_size);
+CALL insertintoqm_tr2(ptin,docin,sample_size,ac,0);
+CALL insertintoqm_tr2(ptin,docin,sample_size,0,1);
+CALL insertintoqm_tr2(ptin,docin,lot_sizein,0,2);
+
+end
+//
+CALL test2('16000002',8,'PPO2210090001');
